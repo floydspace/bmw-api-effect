@@ -1,11 +1,13 @@
 import {
   Cookies,
+  FileSystem,
   HttpClient,
   HttpClientRequest,
   HttpClientResponse,
 } from "@effect/platform";
+import { NodeFileSystem } from "@effect/platform-node";
 import { ParseResult, Schema } from "@effect/schema";
-import { Config, Context, Effect, Layer, Redacted, Ref } from "effect";
+import { Config, Context, Effect, Layer, Option, Redacted, Ref } from "effect";
 import { randomUUID } from "node:crypto";
 import { AuthConfig } from "./AuthConfig";
 import { CLIENT_RUNTIME, fetchBmw, filterStatus3xx } from "./Common";
@@ -156,6 +158,25 @@ export const getAccessToken = (
     );
   });
 
+export const refreshAccessToken = (refreshToken: string) =>
+  Effect.gen(function* () {
+    const config = yield* AuthConfig;
+    const challengeUrl = `${config.gcdmBaseUrl}/gcdm/oauth/token`;
+
+    const body = new URLSearchParams();
+    body.append("scope", "authenticate_user vehicle_data remote_services");
+    body.append("redirect_uri", config.returnUrl);
+    body.append("grant_type", "refresh_token");
+    body.append("refresh_token", refreshToken);
+
+    return yield* HttpClientRequest.post(challengeUrl).pipe(
+      HttpClientRequest.basicAuth(config.clientId, config.clientSecret),
+      HttpClientRequest.urlParamsBody(body),
+      HttpClient.filterStatusOk(fetchBmw),
+      HttpClientResponse.schemaBodyJsonScoped(AuthenticationSchema),
+    );
+  });
+
 export const authenticate = (username: string, password: string) =>
   Effect.gen(function* () {
     const state = generateToken(22);
@@ -184,6 +205,37 @@ export const authenticate = (username: string, password: string) =>
     return yield* getAccessToken(code, codeVerifier, cookiesRef);
   });
 
+export const authenticateCached = (username: string, password: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+
+    let maybeTokenData = yield* fs
+      .readFileString("./cached_token.json")
+      .pipe(
+        Effect.andThen(
+          Schema.decodeUnknown(Schema.parseJson(AuthenticationSchema)),
+        ),
+        Effect.option,
+      );
+
+    if (Option.isSome(maybeTokenData)) {
+      const tokenData = yield* refreshAccessToken(
+        maybeTokenData.value.refresh_token,
+      );
+      yield* fs.writeFileString(
+        "./cached_token.json",
+        JSON.stringify(tokenData),
+      );
+      return tokenData;
+    }
+
+    const tokenData = yield* authenticate(username, password);
+
+    yield* fs.writeFileString("./cached_token.json", JSON.stringify(tokenData));
+
+    return tokenData;
+  });
+
 export class Authentication extends Context.Tag("Authentication")<
   Authentication,
   AuthenticationSchema
@@ -195,8 +247,8 @@ export class Authentication extends Context.Tag("Authentication")<
       password: Config.redacted("MYBMW_PASSWORD"),
     }).pipe(
       Effect.andThen(({ username, password }) =>
-        authenticate(username, Redacted.value(password)),
+        authenticateCached(username, Redacted.value(password)),
       ),
     ),
-  );
+  ).pipe(Layer.provide(NodeFileSystem.layer));
 }

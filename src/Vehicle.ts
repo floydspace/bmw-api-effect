@@ -1,60 +1,47 @@
 import { HttpClientRequest, HttpClientResponse } from "@effect/platform";
 import { Schema } from "@effect/schema";
 import { fetchAuthBmwCocoApi } from "./Common";
+import { MappingInfo, VehicleInfo, VehicleState } from "./Schema";
 
+/**
+ * Retrieves the short list of vehicles.
+ */
 export const getVehicleList = () =>
   HttpClientRequest.post(`/eadrax-vcs/v5/vehicle-list`).pipe(
     fetchAuthBmwCocoApi,
-    HttpClientResponse.json,
-  );
-
-const SoftwareVersion = Schema.Struct({
-  iStep: Schema.Number,
-  puStep: Schema.Struct({
-    month: Schema.Number,
-    year: Schema.Number,
-  }),
-  seriesCluster: Schema.String,
-});
-
-export const getVehicles = () =>
-  HttpClientRequest.get(`/eadrax-vcs/v4/vehicles`).pipe(
-    fetchAuthBmwCocoApi,
     HttpClientResponse.schemaBodyJsonScoped(
-      Schema.Array(
-        Schema.Struct({
-          appVehicleType: Schema.Literal("CONNECTED"),
-          attributes: Schema.Struct({
-            bodyType: Schema.Uppercased,
-            brand: Schema.String,
-            color: Schema.Number,
-            countryOfOrigin: Schema.Uppercased,
-            driveTrain: Schema.Uppercased,
-            headUnitRaw: Schema.Uppercased,
-            headUnitType: Schema.Uppercased,
-            hmiVersion: Schema.Uppercased,
-            lastFetched: Schema.DateFromString,
-            model: Schema.String,
-            softwareVersionCurrent: SoftwareVersion,
-            softwareVersionExFactory: SoftwareVersion,
-            telematicsUnit: Schema.Uppercased,
-            year: Schema.Number,
-          }),
-          mappingInfo: Schema.Struct({
-            isAssociated: Schema.Boolean,
-            isLmmEnabled: Schema.Boolean,
-            isPrimaryUser: Schema.Boolean,
-            mappingStatus: Schema.Uppercased,
-          }),
-          vin: Schema.Uppercased,
-        }),
-      ),
+      Schema.Struct({
+        gcid: Schema.UUID,
+        mappingInfos: Schema.Array(
+          MappingInfo.pipe(
+            Schema.extend(
+              Schema.Struct({
+                vehicleMappingType: Schema.Literal("CONNECTED"),
+                vin: Schema.Uppercased,
+              }),
+            ),
+          ),
+        ),
+      }),
     ),
   );
 
+/**
+ * Retrieves the detailed list of vehicles.
+ */
+export const getVehicles = () =>
+  HttpClientRequest.get(`/eadrax-vcs/v4/vehicles`).pipe(
+    fetchAuthBmwCocoApi,
+    HttpClientResponse.schemaBodyJsonScoped(Schema.Array(VehicleInfo)),
+  );
+
+/**
+ * Retrieves the state of a vehicle using the provided VIN.
+ * @param vin - The VIN (Vehicle Identification Number) of the vehicle.
+ */
 export const getVehicleState = (vin: string) =>
   HttpClientRequest.get(`/eadrax-vcs/v4/vehicles/state`).pipe(
     HttpClientRequest.setHeader("bmw-vin", vin),
     fetchAuthBmwCocoApi,
-    HttpClientResponse.json,
+    HttpClientResponse.schemaBodyJsonScoped(VehicleState),
   );
