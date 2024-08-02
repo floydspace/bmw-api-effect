@@ -5,7 +5,6 @@ import {
   HttpClientRequest,
   HttpClientResponse,
 } from "@effect/platform";
-import { NodeFileSystem } from "@effect/platform-node";
 import { ParseResult, Schema } from "@effect/schema";
 import { Config, Context, Effect, Layer, Option, Redacted, Ref } from "effect";
 import { randomUUID } from "node:crypto";
@@ -240,7 +239,7 @@ export class Authentication extends Context.Tag("Authentication")<
   Authentication,
   AuthenticationSchema
 >() {
-  static Live = Layer.effect(
+  static readonly Live = Layer.effect(
     this,
     Config.all({
       username: Config.string("MYBMW_USERNAME"),
@@ -250,5 +249,5 @@ export class Authentication extends Context.Tag("Authentication")<
         authenticateCached(username, Redacted.value(password)),
       ),
     ),
-  ).pipe(Layer.provide(NodeFileSystem.layer));
+  );
 }

@@ -4,7 +4,7 @@ import { Context, Layer } from "effect";
 import { randomUUID } from "node:crypto";
 import { fetchBmwCocoApi } from "./Common";
 
-const AuthConfigSchema = Schema.Struct({
+class AuthConfigSchema extends Schema.Class<AuthConfigSchema>("AuthConfig")({
   authorizationEndpoint: Schema.String,
   brand: Schema.String,
   clientId: Schema.UUID,
@@ -17,11 +17,10 @@ const AuthConfigSchema = Schema.Struct({
   returnUrl: Schema.String,
   scopes: Schema.Array(Schema.String),
   tokenEndpoint: Schema.String,
-});
-type AuthConfigSchema = Schema.Schema.Type<typeof AuthConfigSchema>;
+}) {}
 
 export const getAuthConfig = () =>
-  HttpClientRequest.get(`/eadrax-ucs/v1/presentation/oauth/config`).pipe(
+  HttpClientRequest.get("/eadrax-ucs/v1/presentation/oauth/config").pipe(
     HttpClientRequest.setHeaders({
       "ocp-apim-subscription-key": "4f1c85a3-758f-a37d-bbb6-f8704494acfa",
       "bmw-session-id": randomUUID(),
@@ -34,5 +33,5 @@ export class AuthConfig extends Context.Tag("AuthConfig")<
   AuthConfig,
   AuthConfigSchema
 >() {
-  static Live = Layer.effect(this, getAuthConfig());
+  static readonly Live = Layer.effect(this, getAuthConfig());
 }
